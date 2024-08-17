@@ -333,6 +333,42 @@ const { assert, expect } = require("chai");
                           reject(e);
                       }
                   });
+                  it("If timestamp diff greater than interval time, interval flag must be true ", async function () {
+                      const { witnessWeather, timestampOffset } = await loadFixture(
+                          deployWitnessWeatherFixture
+                      );
+                      await witnessWeather.switchBeReadWitnessState();
+                      await witnessWeather.witnessWeather(
+                          1,
+                          "0x0000000000000000000000000000000000000000",
+                          {
+                              value: ethers.utils.parseEther("1.2"),
+                          }
+                      );
+                      await network.provider.send("evm_increaseTime", [
+                          await makeSureMoonMinutes(timestampOffset),
+                      ]);
+                      await network.provider.request({ method: "evm_mine", params: [] });
+
+                      const isCorrectMoon = await witnessWeather.isCorrectNoonMinutes();
+                      const beforeWitnessState = await witnessWeather.getWitnessState();
+                      const witnessLength = await witnessWeather.getWitnessLength();
+                      console.log(
+                          `isCorrectMoon: ${isCorrectMoon}, beforeWitnessState: ${beforeWitnessState}, witnessLength: ${witnessLength}`
+                      );
+                      await witnessWeather.performUpkeep([]);
+                      //   const BigNumber = ethers.BigNumber;
+                      const finalWitnessState = await witnessWeather.getWitnessState();
+                      //   const intervalTime = await witnessWeather.getIntervalTime();
+                      await network.provider.send("evm_increaseTime", [601]);
+                      await network.provider.request({ method: "evm_mine", params: [] });
+                      // upkeepNeeded = (isBeReady && timeFlag && hasWitness && hasEnoughBalance);
+                      //   const { upkeepNeeded } = await witnessWeather.callStatic.checkUpkeep("0x");
+                      assert(finalWitnessState.toString() == "1");
+                      const intervalFlag = await witnessWeather.getIntervalFlag();
+                      console.log(`intervalFlag: ${intervalFlag}`);
+                      assert(intervalFlag);
+                  });
               });
 
               describe("failure", async function () {
@@ -361,6 +397,55 @@ const { assert, expect } = require("chai");
                           witnessWeather,
                           "WitnessWeatherSuccess"
                       );
+                  });
+                  it("If witness a weather yet, one day can't duplicate witness", async function () {
+                      const { witnessWeather, timestampOffset } = await loadFixture(
+                          deployWitnessWeatherFixture
+                      );
+                      await witnessWeather.switchBeReadWitnessState();
+                      await witnessWeather.witnessWeather(
+                          1,
+                          "0x0000000000000000000000000000000000000000",
+                          {
+                              value: ethers.utils.parseEther("1.2"),
+                          }
+                      );
+                      await network.provider.send("evm_increaseTime", [
+                          await makeSureMoonMinutes(timestampOffset),
+                      ]);
+                      await network.provider.request({ method: "evm_mine", params: [] });
+
+                      const isCorrectMoon = await witnessWeather.isCorrectNoonMinutes();
+                      const beforeWitnessState = await witnessWeather.getWitnessState();
+                      const witnessLength = await witnessWeather.getWitnessLength();
+                      console.log(
+                          `isCorrectMoon: ${isCorrectMoon}, beforeWitnessState: ${beforeWitnessState}, witnessLength: ${witnessLength}`
+                      );
+                      await witnessWeather.performUpkeep([]);
+                      const BigNumber = ethers.BigNumber;
+                      const finalWitnessState = await witnessWeather.getWitnessState();
+                      const intervalTime = await witnessWeather.getIntervalTime();
+                      await network.provider.send("evm_increaseTime", [599]);
+                      await network.provider.request({ method: "evm_mine", params: [] });
+                      // upkeepNeeded = (isBeReady && timeFlag && hasWitness && hasEnoughBalance);
+                      const { upkeepNeeded } = await witnessWeather.callStatic.checkUpkeep("0x");
+                      const lastTimestamp = await witnessWeather.getLastTimestamp();
+                      const latestBlock = await ethers.provider.getBlock("latest");
+                      const blockTimestamp = latestBlock.timestamp;
+
+                      console.log(
+                          `blockTimestamp: ${blockTimestamp}, lastTimestamp: ${lastTimestamp}, intervalTime: ${intervalTime}`
+                      );
+                      assert(finalWitnessState.toString() == "1");
+                      assert.equal(
+                          BigNumber.from(blockTimestamp)
+                              .sub(BigNumber.from(lastTimestamp))
+                              .sub(BigNumber.from(intervalTime)) > 0,
+                          false
+                      );
+                      assert(!upkeepNeeded);
+                      const intervalFlag = await witnessWeather.getIntervalFlag();
+                      assert(!intervalFlag);
                   });
               });
           });

@@ -61,6 +61,7 @@ contract WitnessWeather is Weather, AutomationCompatibleInterface {
     // Cannot exceed VRFCoordinatorV2.MAX_NUM_WORDS.
     // uint32 private constant NUM_WORDS = 1;
     uint256 private constant MINIMUM_USD = 10 * 10 ** 18;
+    uint256 private constant INTERVAL_TIME = 10 * 60;
 
     // storage
     // uint256 private s_indexWeatherType;
@@ -76,6 +77,7 @@ contract WitnessWeather is Weather, AutomationCompatibleInterface {
     mapping(address => WitnessBonus) private s_keepWitnessBonus;
 
     Weather private s_weather;
+    uint256 private s_lastTimestamp;
 
     /** Events */
     // event WeatherTypeUpdate(uint256 indexWeatherType);
@@ -123,6 +125,7 @@ contract WitnessWeather is Weather, AutomationCompatibleInterface {
         i_nativeLimitFee = nativeLimitFee;
         i_ethLimitFee = ethLimitFee;
         s_witnessState = WitnessState.OPEN;
+        s_lastTimestamp = block.timestamp;
     }
 
     function performUpkeep(bytes calldata /* performData */) external override {
@@ -174,6 +177,7 @@ contract WitnessWeather is Weather, AutomationCompatibleInterface {
         s_currentEthBalance = 0;
         s_currentNativeBalance = 0;
         s_witnessState = WitnessState.BE_READY;
+        s_lastTimestamp = block.timestamp;
     }
 
     // Is current correct moon minutes
@@ -194,11 +198,12 @@ contract WitnessWeather is Weather, AutomationCompatibleInterface {
         bytes memory /* checkData */
     ) public view override returns (bool upkeepNeeded, bytes memory /* performData */) {
         bool isBeReady = (WitnessState.BE_READY == s_witnessState);
+        bool intervalFlag = (block.timestamp - s_lastTimestamp) > INTERVAL_TIME;
         bool timeFlag = isCorrectNoonMinutes();
         bool hasWitness = (s_currentChooseWeather.length > 0);
         bool hasEnoughBalance = (s_currentNativeBalance > i_nativeLimitFee ||
             s_currentEthBalance > i_ethLimitFee);
-        upkeepNeeded = (isBeReady && timeFlag && hasWitness && hasEnoughBalance);
+        upkeepNeeded = (isBeReady && intervalFlag && timeFlag && hasWitness && hasEnoughBalance);
         return (upkeepNeeded, "0x0"); // Remove the warning
     }
 
@@ -401,5 +406,17 @@ contract WitnessWeather is Weather, AutomationCompatibleInterface {
 
     function getWitnessLength() public view returns (uint256) {
         return s_currentChooseWeather.length;
+    }
+
+    function getLastTimestamp() public view returns (uint256) {
+        return s_lastTimestamp;
+    }
+
+    function getIntervalTime() public pure returns (uint256) {
+        return INTERVAL_TIME;
+    }
+
+    function getIntervalFlag() public view returns (bool) {
+        return (block.timestamp - s_lastTimestamp) > INTERVAL_TIME;
     }
 }
