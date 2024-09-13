@@ -79,6 +79,14 @@ contract WitnessWeather is Weather, AutomationCompatibleInterface {
     Weather private s_weather;
     uint256 private s_lastTimestamp;
 
+    bool private unlocked = true;
+    modifier lock() {
+        require(unlocked, "WitnessWeather: LOCKED");
+        unlocked = false;
+        _;
+        unlocked = true;
+    }
+
     /** Events */
     // event WeatherTypeUpdate(uint256 indexWeatherType);
     event WitnessWeatherSuccess(address indexed _witnessAddress);
@@ -128,7 +136,7 @@ contract WitnessWeather is Weather, AutomationCompatibleInterface {
         s_lastTimestamp = block.timestamp;
     }
 
-    function performUpkeep(bytes calldata /* performData */) external override {
+    function performUpkeep(bytes calldata /* performData */) external override lock {
         (bool upkeepNeeded, ) = checkUpkeep("");
         require(upkeepNeeded, "Condition not met");
         s_witnessState = WitnessState.CALCULATING;
@@ -355,15 +363,15 @@ contract WitnessWeather is Weather, AutomationCompatibleInterface {
         }
     }
 
-    function switchCloseWitnessState() public onlyOwner {
+    function switchCloseWitnessState() public lock onlyOwner {
         s_witnessState = WitnessState.CLOSE;
     }
 
-    function switchOpenWitnessState() public onlyOwner {
+    function switchOpenWitnessState() public lock onlyOwner {
         s_witnessState = WitnessState.OPEN;
     }
 
-    function switchBeReadWitnessState() public onlyOwner {
+    function switchBeReadWitnessState() public lock onlyOwner {
         if (s_witnessState != WitnessState.OPEN) {
             revert Witness_SwitchBeReadMustOpenState();
         }
